@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amazon India Sales &amp; GST Dashboard</title>
+<meta name="description" content="Interactive sales, cancellation and GST analysis of 1.29 lakh Amazon India apparel orders (Apr–Jun 2022).">
+<script src="plotly.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+  --accent: #1F3A5F;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --accent: #86b6ef;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --accent: #86b6ef;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 28px 16px 48px; }
+header h1 { margin: 0; font-size: 26px; letter-spacing: -0.01em; color: var(--accent); }
+header p { margin: 4px 0 0; color: var(--ink-2); }
+.filters { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0 16px; align-items: end; }
+.filters label { display: flex; flex-direction: column; font-size: 12px; color: var(--ink-2); gap: 4px; font-weight: 600; }
+select, button { font: inherit; font-size: 14px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--ink); min-width: 170px; }
+button { min-width: 0; cursor: pointer; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.kpi .label { font-size: 12px; color: var(--ink-2); font-weight: 600; }
+.kpi .value { font-size: 26px; font-weight: 700; margin-top: 2px; }
+.kpi .sub { font-size: 12px; color: var(--muted); }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 14px 6px; min-width: 0; }
+.card.wide { grid-column: 1 / -1; }
+.card h2 { margin: 0 0 2px; font-size: 15px; }
+.card .note { margin: 0; font-size: 12px; color: var(--muted); }
+.chart { width: 100%; height: 320px; }
+.card.wide .chart { height: 300px; }
+footer { margin-top: 20px; font-size: 13px; color: var(--ink-2); }
+footer a { color: var(--accent); }
+@media (max-width: 760px) { .grid { grid-template-columns: 1fr; } .kpi .value { font-size: 22px; } select { min-width: 140px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Amazon India Sales &amp; GST Dashboard</h1>
+    <p>1.29 lakh apparel order lines · 31 Mar – 29 Jun 2022 · net sales = shipped/delivered orders</p>
+  </header>
+
+  <div class="filters">
+    <label>Month <select id="fMonth"></select></label>
+    <label>Category <select id="fCat"></select></label>
+    <label>Fulfilment <select id="fFul"><option value="">All</option><option>Amazon</option><option>Merchant</option></select></label>
+    <button id="reset" type="button">Reset</button>
+    <button id="theme" type="button" aria-label="Toggle dark mode">Dark / light</button>
+  </div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="grid">
+    <div class="card wide"><h2>Daily net sales</h2><p class="note">7-day average in bold · 1 Apr – 28 Jun (partial first/last days excluded)</p><div class="chart" id="cTrend"></div></div>
+    <div class="card"><h2>Net sales by category</h2><p class="note">Share of filtered net sales</p><div class="chart" id="cCat"></div></div>
+    <div class="card"><h2>Top 10 states</h2><p class="note">Net sales by ship-to state</p><div class="chart" id="cState"></div></div>
+    <div class="card"><h2>Order status</h2><p class="note">% of all order lines</p><div class="chart" id="cStatus"></div></div>
+    <div class="card"><h2>Cancellation rate by fulfilment</h2><p class="note">Merchant (Easy Ship) vs Amazon (FBA)</p><div class="chart" id="cFul"></div></div>
+    <div class="card"><h2>Estimated GST by component</h2><p class="note">CGST + SGST inside seller state, IGST outside</p><div class="chart" id="cGst"></div></div>
+    <div class="card"><h2>Sales by GST slab</h2><p class="note">5% if ≤ ₹1,000 per piece, else 12%</p><div class="chart" id="cSlab"></div></div>
+  </section>
+
+  <footer>
+    <p><b>Assumptions:</b> amounts are GST-inclusive; apparel GST 5% (≤ ₹1,000 per piece) / 12% (above), as in 2022; seller assumed registered in Maharashtra. Estimates for analysis practice, not a tax filing.</p>
+    <p>Data: public “Amazon Sale Report” dataset (Kaggle). Built with Python, Pandas, SQL &amp; Plotly by <b>Mohd Armaan</b> ·
+      <a href="https://github.com/kmaan0786akwork-collab/amazon-india-sales-gst-analytics">Source code</a></p>
+  </footer>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const C = Object.fromEntries(DATA.cols.map((c, i) => [c, i]));
+const $ = id => document.getElementById(id);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const inr = v => "₹" + Math.round(v).toLocaleString("en-IN");
+const lakh = v => v >= 1e7 ? "₹" + (v / 1e7).toFixed(2) + " Cr" : "₹" + (v / 1e5).toFixed(1) + " L";
+
+// filters
+$("fMonth").innerHTML = '<option value="">All months</option>' + DATA.months.map(m => {
+  const label = new Date(m + "-01").toLocaleString("en-IN", { month: "long", year: "numeric" });
+  return `<option value="${m}">${label}${m === "2022-03" ? " (1 day)" : ""}</option>`;
+}).join("");
+$("fCat").innerHTML = '<option value="">All categories</option>' + DATA.categories.map(c => `<option>${c}</option>`).join("");
+["fMonth", "fCat", "fFul"].forEach(id => $(id).addEventListener("change", render));
+$("reset").onclick = () => { $("fMonth").value = ""; $("fCat").value = ""; $("fFul").value = ""; render(); };
+$("theme").onclick = () => {
+  const dark = document.documentElement.dataset.theme
+    ? document.documentElement.dataset.theme === "dark"
+    : matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.dataset.theme = dark ? "light" : "dark";
+  render();
+};
+
+function sumBy(rows, key, val) {
+  const m = new Map();
+  rows.forEach(r => m.set(r[key], (m.get(r[key]) || 0) + r[val]));
+  return m;
+}
+
+function baseLayout(extra = {}) {
+  return Object.assign({
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "system-ui, -apple-system, Segoe UI, sans-serif", size: 12, color: css("--ink-2") },
+    margin: { l: 10, r: 16, t: 10, b: 30 }, showlegend: false, bargap: 0.35,
+    hoverlabel: { bgcolor: css("--surface"), bordercolor: css("--axis"), font: { color: css("--ink") } },
+    xaxis: { gridcolor: css("--grid"), linecolor: css("--axis"), zeroline: false, automargin: true, tickfont: { color: css("--muted") } },
+    yaxis: { gridcolor: css("--grid"), linecolor: css("--axis"), zeroline: false, automargin: true, tickfont: { color: css("--ink-2") } },
+  }, extra);
+}
+const cfg = { displayModeBar: false, responsive: true };
+// Indian-style axis ticks (lakh / crore) instead of millions
+function lakhTicks(maxV) {
+  const raw = (maxV || 1) / 5, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * p).find(s => s >= raw);
+  const vals = []; for (let v = 0; v <= maxV * 1.12; v += step) vals.push(v);
+  return { tickvals: vals, ticktext: vals.map(v => v === 0 ? "₹0" : lakh(v)), tickmode: "array" };
+}
+
+function hbar(id, labels, values, text, hover) {
+  Plotly.react(id, [{
+    type: "bar", orientation: "h", y: labels, x: values, marker: { color: css("--s1") },
+    text, textposition: "outside", cliponaxis: false, textfont: { color: css("--ink-2"), size: 11 },
+    hovertemplate: hover + "<extra></extra>",
+  }], baseLayout({ margin: { l: 10, r: 56, t: 10, b: 10 }, yaxis: Object.assign(baseLayout().yaxis, { autorange: "reversed", showgrid: false }),
+                   xaxis: Object.assign(baseLayout().xaxis, { tickprefix: "", showticklabels: false }) }), cfg);
+}
+
+function render() {
+  const fm = $("fMonth").value, fc = $("fCat").value, ff = $("fFul").value;
+  const rows = DATA.rows.filter(r => (!fm || r[C.order_month] === fm) && (!fc || r[C.category] === fc) && (!ff || r[C.fulfilment] === ff));
+  const net = rows.filter(r => r[C.is_net_sale] === 1);
+  const tot = k => net.reduce((s, r) => s + r[C[k]], 0);
+  const allLines = rows.reduce((s, r) => s + r[C.lines], 0);
+  const canc = rows.filter(r => r[C.status_group] === "Cancelled").reduce((s, r) => s + r[C.lines], 0);
+  const sales = tot("amount"), gst = tot("gst"), igst = tot("igst");
+
+  const kpis = [
+    ["Net sales", lakh(sales), inr(sales)],
+    ["Net order lines", tot("lines").toLocaleString("en-IN"), tot("qty").toLocaleString("en-IN") + " units"],
+    ["Avg price / unit", inr(sales / (tot("qty") || 1)), "GST-inclusive"],
+    ["Cancellation rate", (100 * canc / (allLines || 1)).toFixed(1) + "%", canc.toLocaleString("en-IN") + " of " + allLines.toLocaleString("en-IN") + " lines"],
+    ["Estimated GST", lakh(gst), "IGST " + (100 * igst / (gst || 1)).toFixed(1) + "% of total"],
+  ];
+  $("kpis").innerHTML = kpis.map(k => `<div class="kpi"><div class="label">${k[0]}</div><div class="value">${k[1]}</div><div class="sub">${k[2]}</div></div>`).join("");
+
+  // trend
+  const dm = new Map();
+  DATA.daily.forEach(([d, cat, v]) => { if ((!fc || cat === fc) && (!fm || d.startsWith(fm))) dm.set(d, (dm.get(d) || 0) + v); });
+  const days = [...dm.keys()].sort(), vals = days.map(d => dm.get(d));
+  const roll = vals.map((_, i) => i < 6 ? null : vals.slice(i - 6, i + 1).reduce((a, b) => a + b, 0) / 7);
+  const note = ff ? " (fulfilment filter not applied to trend)" : "";
+  Plotly.react("cTrend", [
+    { x: days, y: vals, type: "scatter", mode: "lines", line: { color: css("--s1"), width: 1.2 }, opacity: 0.4, name: "Daily",
+      hovertemplate: "%{x|%d %b %Y}<br>Daily: ₹%{y:,.0f}" + note + "<extra></extra>" },
+    { x: days, y: roll, type: "scatter", mode: "lines", line: { color: css("--s1"), width: 2.5 }, name: "7-day avg",
+      hovertemplate: "7-day avg: ₹%{y:,.0f}<extra></extra>" },
+  ], baseLayout({ hovermode: "x unified", showlegend: true, legend: { orientation: "h", y: 1.12, x: 1, xanchor: "right", font: { color: css("--ink-2") } },
+                  yaxis: Object.assign(baseLayout().yaxis, lakhTicks(Math.max(...vals, 0)), { rangemode: "tozero", tickfont: { color: css("--muted") } }) }), cfg);
+
+  // category
+  const cat = [...sumBy(net, C.category, C.amount)].sort((a, b) => b[1] - a[1]);
+  hbar("cCat", cat.map(c => c[0]), cat.map(c => c[1]), cat.map(c => (100 * c[1] / (sales || 1)).toFixed(1) + "%"), "%{y}: ₹%{x:,.0f}");
+
+  // states
+  const st = [...sumBy(net, C.ship_state, C.amount)].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const title = s => s.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase());
+  hbar("cState", st.map(s => title(s[0])), st.map(s => s[1]), st.map(s => lakh(s[1])), "%{y}: ₹%{x:,.0f}");
+
+  // status
+  const order = ["Shipped/Delivered", "Cancelled", "Returned", "Pending", "Lost/Damaged"];
+  const sm = sumBy(rows, C.status_group, C.lines);
+  const pct = order.map(s => 100 * (sm.get(s) || 0) / (allLines || 1));
+  hbar("cStatus", order, pct, pct.map(p => p.toFixed(1) + "%"), "%{y}: %{x:.1f}% of lines");
+
+  // fulfilment cancellation (ignores fulfilment filter by design)
+  const rowsNoFul = DATA.rows.filter(r => (!fm || r[C.order_month] === fm) && (!fc || r[C.category] === fc));
+  const fulVals = ["Amazon", "Merchant"].map(f => {
+    const fr = rowsNoFul.filter(r => r[C.fulfilment] === f);
+    const all = fr.reduce((s, r) => s + r[C.lines], 0), c = fr.filter(r => r[C.status_group] === "Cancelled").reduce((s, r) => s + r[C.lines], 0);
+    return 100 * c / (all || 1);
+  });
+  Plotly.react("cFul", [{ type: "bar", x: ["Amazon (FBA)", "Merchant (Easy Ship)"], y: fulVals, width: 0.45,
+    marker: { color: css("--s1") }, text: fulVals.map(v => v.toFixed(1) + "%"), textposition: "outside", cliponaxis: false,
+    textfont: { color: css("--ink-2") }, hovertemplate: "%{x}: %{y:.1f}% cancelled<extra></extra>" }],
+    baseLayout({ yaxis: Object.assign(baseLayout().yaxis, { ticksuffix: "%", rangemode: "tozero", tickfont: { color: css("--muted") } }),
+                 xaxis: Object.assign(baseLayout().xaxis, { showgrid: false }) }), cfg);
+
+  // GST components
+  const g = [["CGST", tot("cgst")], ["SGST", tot("sgst")], ["IGST", igst]];
+  Plotly.react("cGst", [{ type: "bar", x: g.map(x => x[0]), y: g.map(x => x[1]), width: 0.45, marker: { color: css("--s1") },
+    text: g.map(x => lakh(x[1])), textposition: "outside", cliponaxis: false, textfont: { color: css("--ink-2") },
+    hovertemplate: "%{x}: ₹%{y:,.0f}<extra></extra>" }],
+    baseLayout({ yaxis: Object.assign(baseLayout().yaxis, lakhTicks(Math.max(...g.map(x => x[1]))), { rangemode: "tozero", tickfont: { color: css("--muted") } }),
+                 xaxis: Object.assign(baseLayout().xaxis, { showgrid: false }) }), cfg);
+
+  // slab
+  const sl = sumBy(net, C.slab, C.amount), slg = sumBy(net, C.slab, C.gst);
+  const slabs = [5, 12];
+  Plotly.react("cSlab", [{ type: "bar", x: slabs.map(s => s + "% slab"), y: slabs.map(s => sl.get(s) || 0), width: 0.45,
+    marker: { color: css("--s1") }, customdata: slabs.map(s => slg.get(s) || 0),
+    text: slabs.map(s => (100 * (sl.get(s) || 0) / (sales || 1)).toFixed(1) + "%"), textposition: "outside", cliponaxis: false,
+    textfont: { color: css("--ink-2") }, hovertemplate: "%{x}<br>Sales: ₹%{y:,.0f}<br>GST: ₹%{customdata:,.0f}<extra></extra>" }],
+    baseLayout({ yaxis: Object.assign(baseLayout().yaxis, lakhTicks(Math.max(...slabs.map(s => sl.get(s) || 0))), { rangemode: "tozero", tickfont: { color: css("--muted") } }),
+                 xaxis: Object.assign(baseLayout().xaxis, { showgrid: false }) }), cfg);
+}
+render();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+</script>
+</body>
+</html>
